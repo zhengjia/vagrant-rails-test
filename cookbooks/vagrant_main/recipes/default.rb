@@ -28,14 +28,11 @@ end
 # pg gem dependency
 package "libpq-dev"
 node['rvm']['rubies'].each do |platform|
-  # skip rbx due to ruby-prof
-  unless platform =~ /rbx/
-    rvm_shell "Install rails dependencies for #{platform}" do
-      ruby_string platform
-      cwd         "/vagrant/rails"
-      code        "bundle install"
-    end
-  end  
+  rvm_shell "Install rails dependencies for #{platform}" do
+    ruby_string platform
+    cwd         "/vagrant/rails"
+    code        "bundle install"
+  end
 end  
 
 execute "Build mysql databases" do
