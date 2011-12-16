@@ -17,56 +17,23 @@
 # limitations under the License.
 #
 
-require 'rubygems/dependency_installer'
-
 # install rvm api gem during chef compile phase
-if Gem.source_index.find_name("rvm").empty?
-  Chef::Log.info("Installing RVM gem")
-  Gem::DependencyInstaller.new.install("rvm")
-  begin
-    Gem.activate("rvm")
-    require 'rvm'
-  rescue LoadError
-    Chef::Application.fatal!(
-      "There was a problem installing and loading the 'rvm' gem.")
-  end
-else
-  Chef::Log.debug("RVM gem was installed, so installation skipped")
+gem_package 'rvm' do
+  action :nothing
+end.run_action(:install)
+
+require 'rubygems'
+Gem.clear_paths
+require 'rvm'
+create_rvm_shell_chef_wrapper
+create_rvm_chef_user_environment
+
+class Chef::Resource
+  # mix in #rvm_cmd_wrap helper into resources
+  include Chef::RVM::ShellHelpers
 end
 
-include_recipe "rvm::system"
-
-if node['rvm']['install_rubies'] == true || node['rvm']['install_rubies'] == "true"
-  # set a default ruby
-  rvm_default_ruby node['rvm']['default_ruby']
-
-  # install additional rubies
-  node['rvm']['rubies'].each do |rubie|
-    rvm_ruby rubie
-  end
-
-  # install global gems
-  node['rvm']['global_gems'].each do |gem|
-    rvm_global_gem gem[:name] do
-      version   gem[:version] if gem[:version]
-      action    gem[:action]  if gem[:action]
-      options   gem[:options] if gem[:options]
-      source    gem[:source]  if gem[:source]
-    end
-  end
-
-  # install additional gems
-  node['rvm']['gems'].each_pair do |rstring, gems|
-    rvm_environment rstring
-
-    gems.each do |gem|
-      rvm_gem gem[:name] do
-        ruby_string   rstring
-        version       gem[:version] if gem[:version]
-        action        gem[:action]  if gem[:action]
-        options       gem[:options] if gem[:options]
-        source        gem[:source]  if gem[:source]
-      end
-    end
-  end
+class Chef::Recipe
+  # mix in recipe helpers
+  include Chef::RVM::RecipeHelpers
 end

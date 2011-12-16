@@ -17,101 +17,49 @@
 # limitations under the License.
 #
 
-# thanks to:
-# - http://www.agileweboperations.com/chef-rvm-ruby-enterprise-edition-as-default-ruby/
-# - http://github.com/denimboy/xprdev/blob/master/rvm/recipes/default.rb
+include_recipe "rvm::system_install"
 
-# For more information on the 'action :nothing' and 'run_action(:foo)' usages see
-# http://wiki.opscode.com/display/chef/Evaluate+and+Run+Resources+at+Compile+Time
+install_rubies  = node['rvm']['install_rubies'] == true ||
+                  node['rvm']['install_rubies'] == "true"
 
-script_flags = ""
-if node['rvm']['version']
-  script_flags += " --version #{node['rvm']['version']}"
-end
-if node['rvm']['branch']
-  script_flags += " --branch #{node['rvm']['branch']}"
-end
+if install_rubies
+  # install additional rubies
+  node['rvm']['rubies'].each do |rubie|
+    rvm_ruby rubie
+  end
 
-upgrade_strategy = if node['rvm']['upgrade'].nil? || node['rvm']['upgrade'] == false
-  "none"
-else
-  node['rvm']['upgrade']
-end
+  # set a default ruby
+  rvm_default_ruby node['rvm']['default_ruby']
 
-gem_package_included = node.recipe?("rvm::gem_package")
-
-pkgs = %w{ sed grep tar gzip bzip2 bash curl }
-case node[:platform]
-  when "centos","redhat","fedora"
-    pkgs << "git"
-  when "debian","ubuntu","suse"
-    pkgs << "git-core"
-end
-
-pkgs.each do |pkg|
-  p = package pkg do
-    # excute in compile phase if gem_package recipe is requested
-    if gem_package_included
-      action :nothing
-    else
-      action :install
+  # install global gems
+  node['rvm']['global_gems'].each do |gem|
+    rvm_global_gem gem[:name] do
+      version   gem[:version] if gem[:version]
+      action    gem[:action]  if gem[:action]
+      options   gem[:options] if gem[:options]
+      source    gem[:source]  if gem[:source]
     end
   end
-  p.run_action(:install) if gem_package_included
-end
 
-# Build the rvm group ahead of time, if it is set. This allows avoiding
-# collision with later processes which may set a guid explicitly
-if node['rvm']['group_id'] != 'default'
-  g = group 'rvm' do
-    group_name 'rvm'
-    gid        node['rvm']['group_id']
-    action     :nothing
-  end
-  g.run_action(:create)
-end
+  # install additional gems
+  node['rvm']['gems'].each_pair do |rstring, gems|
+    rvm_environment rstring
 
-i = execute "install system-wide RVM" do
-  user      "root"
-  command   <<-CODE
-    bash -c "bash <( curl -Ls #{node['rvm']['installer_url']} )#{script_flags}"
-  CODE
-  not_if    rvm_wrap_cmd(%{type rvm | head -1 | grep -q '^rvm is a function$'})
-
-  # excute in compile phase if gem_package recipe is requested
-  if gem_package_included
-    action :nothing
-  else
-    action :run
+    gems.each do |gem|
+      rvm_gem gem[:name] do
+        ruby_string   rstring
+        version       gem[:version] if gem[:version]
+        action        gem[:action]  if gem[:action]
+        options       gem[:options] if gem[:options]
+        source        gem[:source]  if gem[:source]
+      end
+    end
   end
 end
-i.run_action(:run) if gem_package_included
 
-t = template  "/etc/rvmrc" do
-  source  "rvmrc.erb"
-  owner   "root"
-  group   "rvm"
-  mode    "0644"
-
-  # excute in compile phase if gem_package recipe is requested
-  if gem_package_included
-    action :nothing
-  else
-    action :create
+# add users to rvm group
+if node['rvm']['group_users'].any?
+  group 'rvm' do
+    members node['rvm']['group_users']
   end
 end
-t.run_action(:create) if gem_package_included
-
-u = execute "upgrade RVM to #{upgrade_strategy}" do
-  user      "root"
-  command   rvm_wrap_cmd(%{rvm get #{upgrade_strategy}})
-  only_if   { %w{ latest head }.include? upgrade_strategy }
-
-  # excute in compile phase if gem_package recipe is requested
-  if gem_package_included
-    action :nothing
-  else
-    action :run
-  end
-end
-u.run_action(:run) if gem_package_included

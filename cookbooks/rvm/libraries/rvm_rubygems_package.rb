@@ -20,24 +20,48 @@
 #
 
 class Chef
+  module RVM
+    module ShellHelpers
+      # stub to satisfy RVMRubygems (library load order not guarenteed)
+    end
+    module SetHelpers
+      # stub to satisfy RVMRubygems (library load order not guarenteed)
+    end
+  end
+
   class Provider
     class Package
       class RVMRubygems < Chef::Provider::Package::Rubygems
+        include Chef::RVM::ShellHelpers
+        include Chef::RVM::SetHelpers
 
         class RVMGemEnvironment < AlternateGemEnvironment
-          attr_reader :ruby_strings
+          include Chef::RVM::ShellHelpers
+          include Chef::RVM::SetHelpers
 
-          def initialize(gem_binary_location, ruby_strings)
+          attr_reader :ruby_strings, :user
+
+          def initialize(gem_binary_location, ruby_strings, user = nil)
             super(gem_binary_location)
             @ruby_strings = ruby_strings
+            @user = user
           end
 
           def gem_paths
             cmd = "rvm #{ruby_strings.join(',')} "
-            cmd << "exec #{@gem_binary_location} env gempath"
+            cmd << "#{rvm_do(user)} #{@gem_binary_location} env gempath"
+
+            if user
+              user_dir    = Etc.getpwnam(user).dir
+              environment = { 'USER' => user, 'HOME' => user_dir }
+            else
+              user_dir    = nil
+              environment = nil
+            end
 
             # shellout! is a fork/exec which won't work on windows
-            shell_style_paths = shell_out!(rvm_wrap_cmd(cmd)).stdout
+            shell_style_paths = shell_out!(
+              rvm_wrap_cmd(cmd, user_dir), :env => environment).stdout
             # on windows, the path separator is semicolon
             paths = shell_style_paths.split(
               ::File::PATH_SEPARATOR).map { |path| path.strip }
@@ -45,9 +69,18 @@ class Chef
 
           def gem_platforms
             cmd = "rvm #{ruby_strings.join(',')} "
-            cmd << "exec #{@gem_binary_location} env"
+            cmd << "#{rvm_do(user)} #{@gem_binary_location} env"
 
-            gem_environment = shell_out!(rvm_wrap_cmd(cmd)).stdout
+            if user
+              user_dir    = Etc.getpwnam(user).dir
+              environment = { 'USER' => user, 'HOME' => user_dir }
+            else
+              user_dir    = nil
+              environment = nil
+            end
+
+            gem_environment = shell_out!(
+              rvm_wrap_cmd(cmd, user_dir), :env => environment).stdout
             if jruby = gem_environment[JRUBY_PLATFORM]
               ['ruby', Gem::Platform.new(jruby)]
             else
@@ -58,7 +91,8 @@ class Chef
 
         def initialize(new_resource, run_context=nil)
           super
-          @gem_env = RVMGemEnvironment.new(gem_binary_path, ruby_strings)
+          user = new_resource.respond_to?("user") ? new_resource.user : nil
+          @gem_env = RVMGemEnvironment.new(gem_binary_path, ruby_strings, user)
         end
 
         ##
@@ -87,14 +121,11 @@ class Chef
         end
 
         def install_package(name, version)
-          ruby_strings_normalized = ruby_strings.map do |ruby_string|
-            normalize_ruby_string(ruby_string)
-          end
-
           # ensure each ruby is installed and gemset exists
-          ruby_strings_normalized.each do |rubie|
-            next if rubie = 'system'
+          ruby_strings.each do |rubie|
+            next if rubie == 'system'
             e = rvm_environment rubie do
+              user    new_resource.user if new_resource.respond_to?("user")
               action :nothing
             end
             e.run_action(:create)
@@ -105,13 +136,27 @@ class Chef
         end
 
         def install_via_gem_command(name, version)
-          src = @new_resource.source &&
-            "  --source=#{@new_resource.source} --source=http://rubygems.org"
+          # Handle installing from a local file.
+          if source_is_remote?
+            src = @new_resource.source &&
+              "  --source=#{@new_resource.source} --source=http://rubygems.org"
+          else
+            name = @new_resource.source
+          end
 
-          cmd = %{rvm #{ruby_strings.join(',')} #{gem_binary_path}}
+          cmd = %{rvm #{ruby_strings.join(',')} #{rvm_do(new_resource.user)} #{gem_binary_path}}
           cmd << %{ install #{name} -q --no-rdoc --no-ri -v "#{version}"}
           cmd << %{#{src}#{opts}}
-          shell_out!(rvm_wrap_cmd(cmd), :env => nil)
+
+          if new_resource.respond_to?("user") && new_resource.user
+            user_dir    = Etc.getpwnam(new_resource.user).dir
+            environment = { 'USER' => new_resource.user, 'HOME' => user_dir }
+          else
+            user_dir    = nil
+            environment = nil
+          end
+
+          shell_out!(rvm_wrap_cmd(cmd, user_dir), :env => environment)
         end
 
         def remove_package(name, version)
@@ -119,14 +164,23 @@ class Chef
         end
 
         def uninstall_via_gem_command(name, version)
-          cmd = %{rvm #{ruby_strings.join(',')} #{gem_binary_path}}
+          cmd = %{rvm #{ruby_strings.join(',')} #{rvm_do(new_resource.user)} #{gem_binary_path}}
           cmd << %{ uninstall #{name} -q -x -I}
           if version
             cmd << %{ -v "#{version}"#{opts}}
           else
             cmd << %{ -a#{opts}}
           end
-          shell_out!(cmd, :env=>nil)
+
+          if new_resource.respond_to?("user") && new_resource.user
+            user_dir    = Etc.getpwnam(new_resource.user).dir
+            environment = { 'USER' => new_resource.user, 'HOME' => user_dir }
+          else
+            user_dir    = nil
+            environment = nil
+          end
+
+          shell_out!(rvm_wrap_cmd(cmd, user_dir), :env => environment)
         end
       end
     end

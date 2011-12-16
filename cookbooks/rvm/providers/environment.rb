@@ -19,32 +19,55 @@
 # limitations under the License.
 #
 
-action :create do
-  ruby_string = new_resource.ruby_string
-  rubie   = select_ruby(ruby_string)
-  gemset  = select_gemset(ruby_string)
+include Chef::RVM::StringHelpers
+include Chef::RVM::RubyHelpers
+include Chef::RVM::GemsetHelpers
 
-  if ruby_unknown?(rubie)
-    Chef::Log.warn("rvm_environment[#{rubie}] is either not fully " +
-      "qualified or not known . Use `rvm list known` to get a full list.")
+def load_current_resource
+  @rubie        = normalize_ruby_string(select_ruby(new_resource.ruby_string))
+  @gemset       = select_gemset(new_resource.ruby_string)
+  @ruby_string  = @gemset.nil? ? @rubie : "#{@rubie}@#{@gemset}"
+  @rvm_env      = ::RVM::ChefUserEnvironment.new(new_resource.user)
+end
+
+action :create do
+  next if skip_environment?
+
+  if @gemset
+    gemset_resource :create
   else
-    if gemset
-      # ensure gemset is created, if specified
-      unless gemset_exists?(:ruby => rubie, :gemset => gemset)
-        g = rvm_gemset gemset do
-          ruby_string   rubie
-          action        :nothing
-        end
-        g.run_action(:create)
-      end
-    else
-      # ensure ruby version is installed
-      unless ruby_installed?(rubie)
-        r = rvm_ruby rubie do
-          action :nothing
-        end
-        r.run_action(:install)
-      end
-    end
+    ruby_resource   :install
+  end
+end
+
+private
+
+def skip_environment?
+  if @rubie.nil?
+    Chef::Log.warn("#{self.class.name}: RVM ruby string `#{@rubie}' " +
+      "is not known. Use `rvm list known` to get a full list.")
+    true
+  else
+    false
+  end
+end
+
+def gemset_resource(exec_action)
+  # ensure gemset is created, if specified
+  unless gemset_exists?(:ruby => @rubie, :gemset => @gemset)
+    rvm_gemset @ruby_string do
+      user    new_resource.user
+      action  :nothing
+    end.run_action(exec_action)
+  end
+end
+
+def ruby_resource(exec_action)
+  # ensure ruby is installed
+  unless ruby_installed?(@rubie)
+    rvm_ruby @rubie do
+      user    new_resource.user
+      action :nothing
+    end.run_action(exec_action)
   end
 end
