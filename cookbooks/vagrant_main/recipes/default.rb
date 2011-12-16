@@ -4,7 +4,7 @@ require_recipe 'git'
 require_recipe 'openssl'
 require_recipe "build-essential"
 require_recipe "java"
-require_recipe "rvm"
+require_recipe "rvm::system"
 require_recipe "rvm::vagrant"
 require_recipe "sqlite"
 require_recipe "mysql::server"
@@ -35,15 +35,16 @@ node['rvm']['rubies'].each do |platform|
   end
 end  
 
-execute "Build mysql databases" do
+rvm_shell "Build mysql databases" do
+  ruby_string node['rvm']['default_ruby']
   cwd "/vagrant/rails/activerecord"
-  command "rake mysql:build_databases"
+  code "bundle exec rake mysql:build_databases"
   not_if %[echo "show databases" | #{mysql_shell} | grep activerecord]
 end
 
-execute "Build postgresql databases" do
-  user "vagrant"
+rvm_shell "Build postgresql databases" do
+  ruby_string node['rvm']['default_ruby']
   cwd "/vagrant/rails/activerecord"
-  command "rake postgresql:build_databases"
+  code "bundle exec rake postgresql:build_databases"
   not_if %[echo "select datname from pg_database" | psql | grep activerecord], :user => 'postgres'
 end
