@@ -42,9 +42,10 @@ rvm_shell "Build mysql databases" do
   not_if %[echo "show databases" | #{mysql_shell} | grep activerecord]
 end
 
-rvm_shell "Build postgresql databases" do
-  ruby_string node['rvm']['default_ruby']
-  cwd "/vagrant/rails/activerecord"
-  code "bundle exec rake postgresql:build_databases"
-  not_if %[echo "select datname from pg_database" | psql | grep activerecord], :user => 'postgres'
-end
+# Uncomment if you have installed postgresql
+# rvm_shell "Build postgresql databases" do
+#   ruby_string node['rvm']['default_ruby']
+#   cwd "/vagrant/rails/activerecord"
+#   code "bundle exec rake postgresql:build_databases"
+#   not_if %[echo "select datname from pg_database" | psql | grep activerecord], :user => 'postgres'
+# end
