@@ -3,12 +3,19 @@ require_recipe 'git'
 require_recipe 'openssl'
 require_recipe "build-essential"
 require_recipe "java"
+require_recipe "vagrant_main::packages"
 require_recipe "rvm::system"
 require_recipe "rvm::vagrant"
 require_recipe "sqlite"
 require_recipe "mysql::server"
 require_recipe "postgresql::server"
 require_recipe "memcached"
+
+rvm_shell "bundle" do
+  ruby_string node['rvm']['default_ruby']
+  cwd         "/vagrant/rails"
+  code        "bundle install"  
+end
 
 # modify from https://github.com/jeroenvandijk/rails_test_box
 mysql_shell = "/usr/bin/mysql -u root"
@@ -18,22 +25,6 @@ execute "Create Mysql Rails user" do
   not_if %[echo "select User from mysql.user" | #{mysql_shell} | grep rails]
 end
 
-execute "Create postgres vagrant user" do
-  user "postgres"
-  command "/usr/bin/createuser vagrant --superuser"
-  not_if %[echo "select usename from pg_user" | psql | grep vagrant], :user => 'postgres'
-end
-
-# pg gem dependency
-package "libpq-dev"
-node['rvm']['rubies'].each do |platform|
-  rvm_shell "Install rails dependencies for #{platform}" do
-    ruby_string platform
-    cwd         "/vagrant/rails"
-    code        "bundle install"
-  end
-end  
-
 rvm_shell "Build mysql databases" do
   ruby_string node['rvm']['default_ruby']
   cwd "/vagrant/rails/activerecord"
@@ -41,10 +32,10 @@ rvm_shell "Build mysql databases" do
   not_if %[echo "show databases" | #{mysql_shell} | grep activerecord]
 end
 
-# Uncomment if you have installed postgresql
-# rvm_shell "Build postgresql databases" do
-#   ruby_string node['rvm']['default_ruby']
-#   cwd "/vagrant/rails/activerecord"
-#   code "bundle exec rake postgresql:build_databases"
-#   not_if %[echo "select datname from pg_database" | psql | grep activerecord], :user => 'postgres'
-# end
+rvm_shell "Build postgresql databases" do
+  ruby_string node['rvm']['default_ruby']
+  user 'postgres'
+  cwd "/vagrant/rails/activerecord"
+  code "/usr/local/rvm/bin/rake postgresql:build_databases"
+  not_if %[echo "select datname from pg_database" | psql | grep activerecord]
+end

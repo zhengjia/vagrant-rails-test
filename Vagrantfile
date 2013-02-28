@@ -4,12 +4,9 @@ Vagrant::Config.run do |config|
   # please see the online documentation at vagrantup.com.
 
   # Every Vagrant virtual environment requires a box to build off of.
-  config.vm.box = "lucid64"
-  
-  config.vm.customize do |vm|
-    vm.name = "Vagrant Rails Test Environment"
-    vm.memory_size = 1024
-  end
+  config.vm.box = "precise64"
+
+  config.vm.customize ["modifyvm", :id, "--memory", 1536, "--name", "Vagrant Rails Test Environment"]
 
   # The url from where the 'config.vm.box' box will be fetched if it
   # doesn't already exist on the user's system.

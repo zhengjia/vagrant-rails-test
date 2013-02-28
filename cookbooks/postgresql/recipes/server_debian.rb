@@ -1,8 +1,10 @@
-#/postgresql.conf.
+#
 # Cookbook Name:: postgresql
 # Recipe:: server
 #
-# Copyright 2009-2010, Opscode, Inc.
+# Author:: Joshua Timberman (<joshua@opscode.com>)
+# Author:: Lamont Granquist (<lamont@opscode.com>)#
+# Copyright 2009-2011, Opscode, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,33 +21,14 @@
 
 include_recipe "postgresql::client"
 
-case node[:postgresql][:version]
-when "8.3"
-  node.default[:postgresql][:ssl] = "off"
-when "8.4"
-  node.default[:postgresql][:ssl] = "true"
-end
+node['postgresql']['server']['packages'].each do |pg_pack|
 
-package "postgresql"
+  package pg_pack
+
+end
 
 service "postgresql" do
-  service_name "postgresql-#{node.postgresql.version}"
+  service_name node['postgresql']['server']['service_name']
   supports :restart => true, :status => true, :reload => true
-  action :nothing
-end
-
-template "#{node[:postgresql][:dir]}/pg_hba.conf" do
-  source "debian.pg_hba.conf.erb"
-  owner "postgres"
-  group "postgres"
-  mode 0600
-  notifies :reload, resources(:service => "postgresql")
-end
-
-template "#{node[:postgresql][:dir]}/postgresql.conf" do
-  source "debian.postgresql.conf.erb"
-  owner "postgres"
-  group "postgres"
-  mode 0600
-  notifies :restart, resources(:service => "postgresql")
+  action [:enable, :start]
 end

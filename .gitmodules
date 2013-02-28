@@ -1,3 +1,6 @@
 [submodule "rails"]
 	path = rails
 	url = git://github.com/rails/rails.git
+[submodule "cookbooks/rvm"]
+	path = cookbooks/rvm
+	url = git://github.com/fnichol/chef-rvm.git
