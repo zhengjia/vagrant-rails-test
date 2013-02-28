@@ -11,11 +11,17 @@ require_recipe "mysql::server"
 require_recipe "postgresql::server"
 require_recipe "memcached"
 
-rvm_shell "bundle" do
-  ruby_string node['rvm']['default_ruby']
-  cwd         "/vagrant/rails"
-  code        "bundle install"  
-end
+node['rvm']['rubies'].each do |ruby|
+  rvm_shell "Bundle for #{ruby}" do
+    ruby_string ruby
+    cwd         "/vagrant/rails"
+    if !ruby.include?('rbx')
+      code      "bundle install"
+    else  
+      code      "RBXOPT=-X19 bundle install"  
+    end  
+  end
+end  
 
 # modify from https://github.com/jeroenvandijk/rails_test_box
 mysql_shell = "/usr/bin/mysql -u root"
