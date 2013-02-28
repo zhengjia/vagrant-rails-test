@@ -1,3 +1,4 @@
+ENV['LANGUAGE'] = ENV['LANG'] = ENV['LC_ALL'] = "en_US.UTF-8"
 require_recipe 'apt'
 require_recipe 'git'
 require_recipe 'openssl'
